@@ -1,0 +1,307 @@
+@* Purpose: Modal dialog allowing users to customize the Google Trends keyword query and region before report generation. *@
+
+@namespace PMRA.Portfolio.Examples.Frontend
+
+@if (IsOpen)
+{
+    <div>
+        <div class="modal-backdrop" @onclick="CancelAsync" role="presentation">
+            <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="trends-modal-title" @onclick:stopPropagation>
+                <header class="modal-header">
+                    <div class="header-text">
+                        <h3 id="trends-modal-title" class="modal-title">Google Trends Search Term</h3>
+                        <p class="modal-subtitle">Specify a student query for interest and YoY demand analysis</p>
+                    </div>
+                    <button type="button" class="btn-close" aria-label="Close dialog" @onclick="CancelAsync">&times;</button>
+                </header>
+
+                <div class="modal-body">
+                    <div class="context-chips">
+                        <div class="chip">
+                            <span class="chip-label">Program:</span>
+                            <strong class="chip-value">@ProgramName</strong>
+                        </div>
+                        <div class="chip">
+                            <span class="chip-label">Market:</span>
+                            <strong class="chip-value">@Market</strong>
+                            <span class="chip-badge">Geo: @GeoCode</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(AwardLevel))
+                        {
+                            <div class="chip">
+                                <span class="chip-label">Award Level:</span>
+                                <strong class="chip-value">@AwardLevel</strong>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="info-alert">
+                        <p class="info-text">
+                            Academic CIP codes yield near-zero results on Google Trends. Provide a real-world search term that prospective students use when researching this field.
+                        </p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="trends-query-input" class="form-label">
+                            Google Search Query
+                            <span class="required-indicator">*</span>
+                        </label>
+                        <input id="trends-query-input"
+                               type="text"
+                               class="trends-input"
+                               value="@SearchTerm"
+                               @oninput="OnQueryInput"
+                               @onkeydown="HandleKeyDown"
+                               placeholder="e.g. computer science degree"
+                               maxlength="300"
+                               autofocus />
+                        @if (ShowEmptyError)
+                        {
+                            <span class="error-text">Please enter a search term, or click Skip to use N/A.</span>
+                        }
+                        else
+                        {
+                            <span class="form-hint">Tip: Query will be evaluated across a 2-year window for regional YoY change and worldwide volume.</span>
+                        }
+                    </div>
+
+                    @if (SuggestedTerms.Count > 0)
+                    {
+                        <div class="suggestions-group">
+                            <span class="suggestions-label">Quick suggestions:</span>
+                            <div class="suggestion-pills">
+                                @foreach (var term in SuggestedTerms)
+                                {
+                                    <button type="button"
+                                            class="suggestion-pill @(SearchTerm.Equals(term, StringComparison.OrdinalIgnoreCase) ? "active" : "")"
+                                            @onclick="() => SelectSuggestion(term)">
+                                        @term
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <footer class="modal-footer">
+                    <div class="footer-left">
+                        <button type="button" class="btn btn-skip" @onclick="SkipAsync">
+                            Skip / Use N/A
+                        </button>
+                    </div>
+                    <div class="footer-right">
+                        <button type="button" class="btn btn-cancel" @onclick="CancelAsync">
+                            Cancel
+                        </button>
+                        <button type="button" class="btn-primary btn-confirm" @onclick="ConfirmAsync" disabled="@(string.IsNullOrWhiteSpace(SearchTerm))">
+                            Search &amp; Generate Report
+                        </button>
+                    </div>
+                </footer>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// Indicates whether the Google Trends search configuration modal is currently visible.
+    /// </summary>
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    /// <summary>
+    /// The academic program title selected by the user.
+    /// </summary>
+    [Parameter]
+    public string ProgramName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The geographic market selected for the report.
+    /// </summary>
+    [Parameter]
+    public string Market { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The award level selected for the report.
+    /// </summary>
+    [Parameter]
+    public string AwardLevel { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Callback invoked when the user confirms their chosen search term to generate the report.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnConfirm { get; set; }
+
+    /// <summary>
+    /// Callback invoked when the user opts to skip Google Trends and proceed without search data.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnSkip { get; set; }
+
+    /// <summary>
+    /// Callback invoked when the user cancels out of report generation entirely.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private string SearchTerm { get; set; } = string.Empty;
+    private string lastProgram = string.Empty;
+    private string lastAwardLevel = string.Empty;
+    private bool ShowEmptyError { get; set; }
+
+    /// <summary>
+    /// Maps the selected market display name to its ISO sub-region code for Google Trends queries.
+    /// </summary>
+    private string GeoCode => Market switch
+    {
+        "Minnesota"             => "US-MN",
+        "Midwest"               => "US",
+        "National"              => "US",
+        _                       => "US"
+    };
+
+    /// <summary>
+    /// Generates quick suggestion query variants based on cleaned program title and award level.
+    /// </summary>
+    private List<string> SuggestedTerms
+    {
+        get
+        {
+            var clean = CleanProgramName(ProgramName);
+            if (string.IsNullOrWhiteSpace(clean)) return [];
+
+            var award = GetAwardLevelSuffix(AwardLevel);
+            var list = new List<string>();
+
+            if (award == "certificate")
+            {
+                list.Add($"{clean.ToLowerInvariant()} certificate");
+                list.Add(clean.ToLowerInvariant());
+                list.Add($"{clean.ToLowerInvariant()} degree");
+            }
+            else
+            {
+                list.Add($"{clean.ToLowerInvariant()} degree");
+                list.Add(clean.ToLowerInvariant());
+                list.Add($"{clean.ToLowerInvariant()} {award}");
+            }
+
+            return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+    }
+
+    /// <summary>
+    /// Updates the default search term when the modal opens with a new program or award level.
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        if (IsOpen && (ProgramName != lastProgram || AwardLevel != lastAwardLevel))
+        {
+            lastProgram = ProgramName;
+            lastAwardLevel = AwardLevel;
+            var clean = CleanProgramName(ProgramName);
+            var award = GetAwardLevelSuffix(AwardLevel);
+            var defaultQuery = award == "certificate"
+                ? $"{clean.ToLowerInvariant()} certificate"
+                : $"{clean.ToLowerInvariant()} degree";
+            SearchTerm = !string.IsNullOrWhiteSpace(clean) ? defaultQuery : string.Empty;
+            ShowEmptyError = false;
+        }
+    }
+
+    /// <summary>
+    /// Resolves the search query suffix appropriate for the specified award level.
+    /// </summary>
+    private static string GetAwardLevelSuffix(string? awardLevel)
+    {
+        if (string.IsNullOrWhiteSpace(awardLevel)) return "bachelor";
+        return awardLevel.Trim().ToLowerInvariant() switch
+        {
+            "certificate" or "postbaccalaureate certificate" or "post-masters certificate" => "certificate",
+            "associates" or "associate" => "associate",
+            "bachelors" or "bachelor" => "bachelor",
+            "masters" or "master" => "masters",
+            "doctoral" or "doctorate" => "doctoral",
+            _ => awardLevel.Trim().ToLowerInvariant()
+        };
+    }
+
+    /// <summary>
+    /// Strips leading CIP numbers and punctuation from a program title.
+    /// </summary>
+    private static string CleanProgramName(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+        var dashIdx = raw.IndexOf('-');
+        var title = dashIdx >= 0 ? raw[(dashIdx + 1)..].Trim() : raw.Trim();
+        return title.TrimEnd('.').Trim();
+    }
+
+    /// <summary>
+    /// Updates the query input text state and clears empty validation alerts.
+    /// </summary>
+    private void OnQueryInput(ChangeEventArgs e)
+    {
+        SearchTerm = e.Value?.ToString() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            ShowEmptyError = false;
+        }
+    }
+
+    /// <summary>
+    /// Applies a clicked search term suggestion into the input box.
+    /// </summary>
+    private void SelectSuggestion(string term)
+    {
+        SearchTerm = term;
+        ShowEmptyError = false;
+    }
+
+    /// <summary>
+    /// Handles keyboard shortcut keys (Enter to confirm, Escape to cancel).
+    /// </summary>
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ConfirmAsync();
+        }
+        else if (e.Key == "Escape")
+        {
+            await CancelAsync();
+        }
+    }
+
+    /// <summary>
+    /// Validates and submits the active search term to proceed with report generation.
+    /// </summary>
+    private async Task ConfirmAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            ShowEmptyError = true;
+            return;
+        }
+
+        await OnConfirm.InvokeAsync(SearchTerm.Trim());
+    }
+
+    /// <summary>
+    /// Skips Google Trends search and triggers report generation without search volume.
+    /// </summary>
+    private async Task SkipAsync()
+    {
+        await OnSkip.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Dismisses the modal and cancels report generation.
+    /// </summary>
+    private async Task CancelAsync()
+    {
+        await OnCancel.InvokeAsync();
+    }
+}
