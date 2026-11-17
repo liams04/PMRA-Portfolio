@@ -1,38 +1,32 @@
-# Additional Implementation Summaries
+# Other Subsystems (Summaries)
 
-This document provides high-level architectural overviews of two additional core subsystems developed for the **Program Market Research Application (PMRA)**. To respect organizational data agreements, proprietary code for these implementations is not published in this public repository.
+These are brief technical summaries of two other subsystems we built for PMRA. To respect university ownership, full production code for these modules is not published in this showcase repository.
 
 ---
 
 ## 1. NCHS Public Health Data Integration
 
-### Problem Statement & Domain Relevance
-When evaluating healthcare-oriented academic programs (such as *Nursing*, *Healthcare Informatics*, and *Public Health Services*), regional economic data alone does not capture the public health imperatives that drive healthcare workforce hiring. To enrich program viability analysis, PMRA integrates health metrics published by the **National Center for Health Statistics (NCHS)** and the **Centers for Disease Control and Prevention (CDC)**.
+### The Problem
+When evaluating healthcare programs (like Nursing, Healthcare Informatics, or Public Health), standard economic metrics only tell part of the story. Student and workforce demand in healthcare is often driven by regional public health needs, disease prevalence, and county health worker shortages.
 
-### Architectural Solution
-* **RESTful External Retrieval**: Built a resilient C# service communicating with federal open data APIs (data.cdc.gov / Socrata Open Data API) using strongly typed HTTP client factories.
-* **Geographic Alignment**: Transformed county-level and state-level public health datasets (e.g., chronic disease burdens, provider-to-population ratios, rural health shortage designations) to match university market boundaries (Minnesota, Upper Midwest, and National).
-* **Caching & Fallback Strategy**: Given that federal health statistical datasets update on irregular annual or multi-year cycles, implemented an asynchronous caching layer (`IMemoryCache` backed by database staging) to ensure instant report rendering without blocking on federal API uptime.
-
-### Technical Takeaway
-Demonstrates experience integrating non-commercial government REST APIs, dealing with variable health record schemas, and synthesizing disparate health statistics into meaningful academic program context.
+### What We Built
+* **REST Ingestion**: Built a C# service that queries public health metrics from the CDC and the National Center for Health Statistics (NCHS) open data APIs (data.cdc.gov).
+* **County-to-Market Aggregation**: NCHS data is typically released at county or state levels. We mapped these records into our application's geographic market definitions (e.g., aggregating Minnesota counties to reflect regional healthcare service areas).
+* **Caching**: Because government health datasets update infrequently (typically annually or bi-annually), we cached responses locally in PostgreSQL so that report generation remains instantaneous.
 
 ---
 
-## 2. Automated Multi-Source ETL Pipeline (IPEDS / BLS / NSC)
+## 2. Multi-Source ETL Pipeline (IPEDS / BLS / NSC)
 
-### Problem Statement
-A comprehensive market research report requires aggregating data across multiple massive government datasets:
-* **IPEDS (Integrated Postsecondary Education Data System)**: Over 6,000 postsecondary institutions reporting annual completions, degrees conferred, and enrollment trends.
-* **BLS OEWS (Occupational Employment and Wage Statistics)**: Hundreds of thousands of metropolitan and state wage distributions across thousands of Standard Occupational Classification (SOC) occupations.
-* **National Student Clearinghouse (NSC)**: Aggregate enrollment momentum benchmarks.
+### The Problem
+Generating a complete market report requires joining data across three massive federal sources:
+* **IPEDS**: National Center for Education Statistics data covering degree completions and program conferrals from over 6,000 colleges.
+* **BLS OEWS**: Bureau of Labor Statistics data providing occupational employment counts and wage percentiles (10th, 25th, Median, 75th, 90th).
+* **National Student Clearinghouse (NSC)**: Benchmark data for national and regional enrollment trends.
 
-Manually downloading, parsing, and joining these gigabyte-scale datasets is slow, error-prone, and unsustainable for continuous academic decision-making.
+Downloading and joining these multi-gigabyte files manually was the bottleneck our client wanted to eliminate.
 
-### Architectural Solution
-* **Modular Python Ingest Engine**: Created an automated ingestion suite using Python and Pandas. Each data source implements a unified ingestion interface with custom parsers for differing CSV schemas, fixed-width text files, and Excel releases.
-* **Semantic CIP-to-SOC Crosswalk Engine**: Engineered the translation layer bridging academic Classification of Instructional Programs (CIP) with federal Standard Occupational Classification (SOC) codes. Handled one-to-many and many-to-many crosswalk relationships using weighted distribution models to accurately project career outcomes.
-* **Automated Run-Logging & Integrity Verification**: Every pipeline execution writes an immutable run record detailing download checksums, parsed row counts, and schema validation checks. This run log automatically drives the web application's cache invalidation engine.
-
-### Technical Takeaway
-Demonstrates expertise in large-scale data modeling, data pipeline orchestration, schema migration, and cross-domain data standardizations.
+### What We Built
+* **Python Ingestion Scripts**: Built standalone Python modules to download, unpack, and validate each source dataset independently.
+* **The CIP-SOC Crosswalk**: Program completions use CIP codes, while wage statistics use SOC codes. We wrote crosswalk mapping scripts that connect each academic degree to its relevant career paths, handling both one-to-many and many-to-many relationships.
+* **Pipeline Run Logging**: Every pipeline run writes a record with timestamp, row counts, and status to a `PipelineRunLog` table. This allows the web API to detect when cached reports are out of date and need to be recalculated.

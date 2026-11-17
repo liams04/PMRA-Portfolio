@@ -1,60 +1,54 @@
-# Showcase: Google Trends & SerpAPI Integration
+# Example: Google Trends & SerpAPI Integration
 
-## Architectural Context & The Real-World Problem
+## The Problem
 
-When evaluating consumer demand for higher education academic programs, search engine momentum is an invaluable indicator of prospective student interest. However, integrating Google Trends data into an enterprise academic report posed three key technical challenges:
+When universities evaluate student interest in a degree, Google search trends are a great indicator of real-world demand. But adding Google Trends to our report pipeline came with two big hurdles:
 
-1. **Taxonomy Mismatch**: Academic institutions categorize programs via formal federal CIP codes (e.g., `11.0701 - Computer Science` or `51.3801 - Registered Nursing/Registered Nurse`). Prospective students, however, search for colloquial phrases like *"computer science degree"* or *"nursing bachelor program"*. Raw CIP titles yield virtually zero search volume on Google Trends.
-2. **Deriving Meaningful YoY Growth**: Google Trends does not provide a built-in "Year-over-Year (YoY) Change" indicator. Standard queries return an index between 0 and 100 normalized to the peak point within that specific time window.
-3. **Minimizing External Latency & API Costs**: Querying third-party APIs during report generation introduces network latency and per-call operational costs. Making excessive requests degrades the user experience.
+1. **Academic Titles vs. Everyday Searches**: Government catalogs use formal names like `11.0701 - Computer Science.` or `51.3801 - Registered Nursing/Registered Nurse`. If you query Google Trends for those exact strings, search volume is essentially zero. Real students search for terms like *"computer science degree"* or *"nursing bachelor program"*.
+2. **Calculating Fair Year-over-Year (YoY) Change**: Google Trends doesn't output raw search volume—it returns relative scores from 0 to 100 normalized to the highest peak in whatever time window you request. If you make one call for "this year" and a separate call for "last year", the two scales don't match, and taking the difference produces meaningless percentages.
 
 ---
 
-## Technical Solution & Algorithm
-
-To solve these constraints, I designed and implemented `GoogleTrendsService` with a specialized multi-window aggregation strategy:
+## How I Solved It
 
 ```mermaid
 flowchart TD
-    Req["Incoming Report Request<br/>(Query: 'data science degree', Geo: 'US-MN')"] --> Svc["GoogleTrendsService"]
+    Req["Report Request<br/>(e.g., Query: 'computer science degree', Geo: 'US-MN')"] --> Svc["GoogleTrendsService"]
     
-    subgraph Execution["Parallel or Staged HTTP Orchestration"]
-        Svc --> Call1["Call 1: Regional 2-Year Window<br/>'yyyy-MM-dd yyyy-MM-dd'"]
-        Svc --> Call2["Call 2: Worldwide 1-Year Window<br/>'today 12-m'"]
+    subgraph Calls["SerpAPI HTTP Requests"]
+        Svc --> Call1["Call 1: Regional 2-Year Window<br/>(startDate to endDate)"]
+        Svc --> Call2["Call 2: Worldwide 1-Year Window<br/>('today 12-m')"]
     end
 
-    Call1 --> TL["Weekly Timeline (104 data points, oldest first)"]
-    Call2 --> WW["Worldwide Averages"]
+    Call1 --> TL["104 Weekly Data Points (0–100 scale)"]
+    Call2 --> WW["Worldwide Average Index"]
 
-    subgraph Derivation["Timeline Split Algorithm"]
-        TL --> Split{"Midpoint Split (Index 52)"}
-        Split --> Prior["Prior Year (Points 0-51)<br/>Average = PriorYearIndex"]
-        Split --> Current["Recent Year (Points 52-103)<br/>Average = CurrentIndex"]
+    subgraph Math["Timeline Midpoint Split"]
+        TL --> Split{"Split at Index 52"}
+        Split --> Prior["Weeks 1–52 (Prior Year)<br/>Average = PriorYearIndex"]
+        Split --> Current["Weeks 53–104 (Current Year)<br/>Average = CurrentIndex"]
         Prior & Current --> YoY["YoY % = ((Current - Prior) / Prior) * 100"]
     end
 
-    YoY & WW --> Result["GoogleTrendsResult Object<br/>(CurrentIndex, PriorYearIndex, YoYChangePct, WorldwideIndex)"]
+    YoY & WW --> Result["GoogleTrendsResult Object"]
 ```
 
-### 1. Two-Year Regional Window Midpoint Split
-Rather than making separate requests for "last year" and "this year" (which would normalize to different scales and make percentage comparisons mathematically invalid!), the service requests a single **two-year continuous timeline** (`DateTime.UtcNow.AddYears(-2)` to `DateTime.UtcNow`).
+### The 2-Year Midpoint Split
+Instead of making two separate queries for this year and last year, I requested a single **continuous 2-year window** from SerpAPI (`DateTime.UtcNow.AddYears(-2)` to `DateTime.UtcNow`).
 
-Because the 104 weekly data points are normalized by Google on the **same 0–100 baseline**, the timeline is split at the midpoint (`mid = points.Count / 2`):
-* **Points 0 to 51**: Prior-year weekly relative interest.
-* **Points 52 to 103**: Current-year weekly relative interest.
-* **YoY Momentum**: Calculated directly as:
-  $$\text{YoY Change \%} = \frac{\text{CurrentAvg} - \text{PriorAvg}}{\text{PriorAvg}} \times 100$$
+Because the whole 2-year span is evaluated together, Google Trends normalizes all 104 weekly points against the same single baseline:
+* **Points 0 to 51**: The prior year's weekly interest.
+* **Points 52 to 103**: The current year's weekly interest.
 
-### 2. Worldwide Baseline Comparison
-A concurrent lightweight 1-year worldwide query (`"today 12-m"`) extracts the international demand index, giving university leadership visibility into whether a degree has global appeal or strictly domestic traction.
+Taking the average of each half gives two numbers on the exact same scale, allowing us to compute a mathematically valid Year-over-Year momentum percentage:
+$$\text{YoY Change \%} = \frac{\text{CurrentAvg} - \text{PriorAvg}}{\text{PriorAvg}} \times 100$$
 
-### 3. Production Hardening
-* **Clean Deserialization Models**: SerpAPI's complex nested JSON structure is mapped to private, strongly typed records to prevent leaky internal abstractions.
-* **Resilient Error & Key Handling**: Validates API secrets upfront via ASP.NET Core's `IOptions<GoogleTrendsOptions>` pattern and logs clean diagnostic telemetry.
+### Worldwide Baseline
+A second lightweight query for `"today 12-m"` with no geographic filter provides a worldwide baseline index, showing leadership whether interest is purely regional or has international reach.
 
 ---
 
-## Included Files in this Example
-* [`IGoogleTrendsService.cs`](IGoogleTrendsService.cs): The public service interface decoupling report generation from the external API provider.
-* [`GoogleTrendsService.cs`](GoogleTrendsService.cs): The production service implementation with timeline splitting and HTTP orchestration.
-* [`GoogleTrendsModels.cs`](GoogleTrendsModels.cs): The shared DTO contracts and request payloads.
+## Files in this Directory
+* [`GoogleTrendsService.cs`](GoogleTrendsService.cs): The C# implementation with URL encoding, HTTP error handling, and the timeline splitting logic.
+* [`IGoogleTrendsService.cs`](IGoogleTrendsService.cs): The service interface decoupling the report generator from the external API provider.
+* [`GoogleTrendsModels.cs`](GoogleTrendsModels.cs): The DTOs returned to the report builder.

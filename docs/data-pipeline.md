@@ -1,114 +1,61 @@
 # Data Collection & Pipeline Workflow
 
-## Overview
+## Why We Preprocess the Data
 
-A fundamental requirement of the **Program Market Research Application (PMRA)** is deterministic, preprocessed data availability: academic administrators must never experience latency or timeouts due to live multi-gigabyte government file downloads when requesting a report.
+Government education and labor datasets (like IPEDS and BLS OEWS) are huge—often several gigabytes across multiple CSV, fixed-width, and Excel files. 
 
-To achieve this, PMRA utilizes an automated Python-based ETL (Extract, Transform, Load) data pipeline that processes public datasets on a scheduled cadence (typically semi-annually aligned with federal release schedules) or via manual administrative trigger.
+One of our early architectural decisions was: **users should never wait for an external file to download while generating a report**. All primary datasets are ingested, cleaned, and stored in our database ahead of time. When an administrator clicks "Generate Report", the system is only running calculations on pre-cleaned local tables, making generation fast and reliable.
 
 ---
 
-## Data Pipeline Lifecycle
+## Pipeline Workflow
 
 ```mermaid
 flowchart TD
-    subgraph DataSources["External Public Data Sources"]
-        IPEDS["IPEDS Completions & Enrollments<br/>(NCES / Department of Education)"]
-        BLS["BLS Occupational Employment & Wages<br/>(OEWS Data)"]
-        NSC["National Student Clearinghouse<br/>(NSC Enrollment Research)"]
-        Crosswalk["CIP-SOC Crosswalk Tables<br/>(Academic Program ↔ Career Code)"]
+    subgraph Sources["Government Datasets"]
+        IPEDS["IPEDS Completions & Enrollments<br/>(NCES)"]
+        BLS["Occupational Employment & Wages<br/>(BLS OEWS)"]
+        NSC["Student Clearinghouse Data<br/>(NSC)"]
+        Crosswalk["CIP-to-SOC Crosswalks<br/>(NCES / BLS)"]
     end
 
-    subgraph PipelineOrchestration["Python Data Pipeline Orchestration"]
-        subgraph Stage1["1. Discovery & Ingestion"]
-            Fetch["Automated Downloaders / HTTP Crawlers"]
-            Checksum["Integrity Checksum & Archive Verification"]
-            StageRaw["Stage into PostgreSQL raw schema"]
-        end
-
-        subgraph Stage2["2. Cleaning & Standardization"]
-            Clean["Data Cleaning & Type Coercion"]
-            MapCrosswalk["CIP ↔ SOC Career Crosswalk Mapping"]
-            Standardize["Normalize Region / Market Definitions"]
-            StageClean["Stage into PostgreSQL clean schema"]
-        end
-
-        subgraph Stage3["3. Validation & Run Logging"]
-            SchemaCheck["Schema & Range Validation Rules"]
-            StalenessMark["Mark Existing Cached Reports as Stale"]
-            RunLog["Write to Pipeline Run Log<br/>(Timestamp, Row Counts, Status)"]
-        end
+    subgraph PythonPipeline["Python Ingestion Scripts"]
+        Download["1. Downloaders<br/>(Detect new releases & fetch archives)"]
+        RawLoad["2. Load into 'raw' schema"]
+        Clean["3. Clean & Standardize<br/>(Type coercion, missing data handling)"]
+        Map["4. Crosswalk Mapping<br/>(Link CIP degree codes to SOC career codes)"]
+        CleanLoad["5. Load into 'clean' schema"]
+        Log["6. Write to PipelineRunLog<br/>(Record timestamp & invalidate old reports)"]
     end
 
-    subgraph Serving["Application & Serving Layer"]
-        AppEngine["PMRA Application Services"]
-        ReportCache["reporting.Reports Materialized Cache"]
+    subgraph App["Application"]
+        API["ASP.NET Core API"]
     end
 
-    %% Flow connections
-    IPEDS --> Fetch
-    BLS --> Fetch
-    NSC --> Fetch
-    Crosswalk --> Fetch
-
-    Fetch --> Checksum
-    Checksum --> StageRaw
-
-    StageRaw --> Clean
-    Clean --> MapCrosswalk
-    MapCrosswalk --> Standardize
-    Standardize --> StageClean
-
-    StageClean --> SchemaCheck
-    SchemaCheck --> StalenessMark
-    StalenessMark --> RunLog
-
-    RunLog -.->|Invalidates Stale Cache| ReportCache
-    StageClean -->|Supplies Preprocessed Data| AppEngine
+    Sources --> Download
+    Download --> RawLoad --> Clean --> Map --> CleanLoad --> Log
+    Log -.->|Triggers re-calculation on next request| API
+    CleanLoad -->|Queried during report generation| API
 ```
 
 ---
 
-## Ingestion Stages Explained
+## Key Pipeline Steps
 
-### 1. Discovery & Automated Download
-* **Isolated Source Readers**: Each data provider (BLS, IPEDS, NSC) has a dedicated ingest reader. This isolates vendor-specific file format anomalies (CSV variations, fixed-width headers, Excel multi-sheet structures).
-* **Deterministic Versioning**: The pipeline tracks release dates and hashes to avoid redundant processing of unchanged data archives.
-* **Raw Archival**: Unmodified data is archived into the `raw` schema, ensuring complete traceability and enabling re-processing if cleaning logic is revised.
+### 1. Ingestion & Raw Staging
+Each government source has its own Python module. This keeps source-specific quirks isolated—for example, handling changes in BLS column names between survey years or unpacking IPEDS ZIP archives. The raw data is saved into the database's `raw` schema so we have an exact audit trail of what was originally downloaded.
 
-### 2. Standardization & CIP-to-SOC Crosswalk
-* **The Semantic Bridge**: Higher education degree classifications are structured according to **CIP** (Classification of Instructional Programs) codes (e.g., `11.0101 - Computer and Information Sciences`). Labor and wage statistics are categorized by **SOC** (Standard Occupational Classification) codes (e.g., `15-1252 - Software Developers`).
-* **Crosswalk Translation**: The pipeline applies official federal crosswalks, weighted mappings, and regional groupings to tie degree completions directly to career wage percentiles (10th, 25th, Median, 75th, 90th percentiles) and projected job openings.
+### 2. The CIP-to-SOC Career Crosswalk
+This was one of the most interesting data engineering challenges on the project:
+* Universities describe degrees using **CIP** (Classification of Instructional Programs) codes (e.g., `11.0701 - Computer Science`).
+* The Bureau of Labor Statistics describes jobs and salaries using **SOC** (Standard Occupational Classification) codes (e.g., `15-1252 - Software Developers`).
+
+A single degree might prepare students for multiple careers, and a single career might draw graduates from multiple degrees. Our pipeline applies federal crosswalk mappings to link CIP programs to their corresponding SOC codes, allowing us to accurately display 10th, 25th, Median, 75th, and 90th percentile wages for each program.
 
 ### 3. Pipeline Run Log & Cache Invalidation
-* Every pipeline run records an immutable entry in the `PipelineRunLog` table containing:
-  * Execution timestamp and duration
-  * Source datasets ingested and row counts
-  * Status (Success / Partial / Failure)
-* **Automatic Cache Invalidation**: The report generation service references this log. If the latest successful pipeline run timestamp is newer than a stored report's generation date, the cached report is flagged as historical/stale, prompting an automated re-calculation on demand.
+When the pipeline finishes running, it logs an entry into the `PipelineRunLog` table with:
+* The run timestamp.
+* Datasets updated and row counts.
+* Success or error status.
 
----
-
-## Live Data Integration: Google Trends (SerpAPI)
-
-Unlike historical demographic and labor data, consumer and student search interest changes weekly. Search interest is retrieved on demand via SerpAPI's Google Trends engine:
-
-```mermaid
-sequenceDiagram
-    participant Pipeline as Report Ingestion Flow
-    participant Trends as GoogleTrendsService
-    participant Serp as SerpAPI
-    participant DB as Reporting Database
-
-    Pipeline->>Trends: QueryAsync(searchTerm, geoCode)
-    Trends->>Serp: Call 1: 2-year regional timeline window (yyyy-MM-dd yyyy-MM-dd)
-    Serp-->>Trends: Weekly interest scores (0-100)
-    Trends->>Serp: Call 2: 1-year worldwide window ("today 12-m")
-    Serp-->>Trends: Timeline values & worldwide averages
-    Trends->>Trends: Split regional timeline into Prior Year & Current Year halves
-    Trends->>Trends: Calculate Year-over-Year (YoY) Change %
-    Trends-->>Pipeline: GoogleTrendsResult (Current, Prior, YoY%, Worldwide)
-    Pipeline->>DB: Store with report snapshot for reproducibility
-```
-
-This hybrid model combines the speed and stability of preprocessed federal data with the responsiveness of live consumer interest indicators.
+The web API checks this timestamp. If an administrator views a report that was generated before the latest pipeline run, the app automatically flags it as historical and can recalculate it with the newest data.

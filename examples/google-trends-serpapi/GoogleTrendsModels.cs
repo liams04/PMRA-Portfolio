@@ -58,3 +58,4 @@ public class TrendsQueryRequest
     /// </summary>
     public string Geo { get; set; } = "US";
 }
+

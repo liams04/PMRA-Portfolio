@@ -1,73 +1,40 @@
-# Application Screenshots & UI Showcase Guide
+# Screenshots & Visual Guide
 
-This guide outlines recommended screenshots to capture from the **PMRA** application to visually demonstrate key features, UI architecture, and analytical capabilities in this portfolio.
+This folder holds screenshots of the **PMRA** application to show what the live interface looks like. 
 
-Place captured image files into this directory (`docs/screenshots/`) using the suggested filenames below.
-
----
-
-## Recommended Screenshots
-
-### 1. Main Dashboard & Report Header
-* **Filename**: `01_dashboard_header.png`
-* **What to capture**:
-  * Top navigation bar, institution branding, and report parameter selector.
-  * Inputs: Program selection (CIP Combobox), Market selection (e.g., Regional vs. National), Award Level dropdown, and Rubric toggle.
-  * Executive Summary banner showing the overall composite score, program status badge, and generation timestamp.
-* **Why it matters**: Demonstrates clean layout, intuitive parameter configuration, and executive presentation of complex academic data.
+Save captured images in this directory (`docs/screenshots/`) using the filenames listed below.
 
 ---
 
-### 2. Google Trends Search Term Modal
-* **Filename**: `02_google_trends_modal.png`
-* **What to capture**:
-  * The dialog pop-up (`GoogleTrendsModal.razor`) triggered during report creation.
-  * Context chips displaying selected Program, Market, and Geo Code.
-  * The search term input box with suggestion pills (e.g., `"computer science degree"`, `"software engineering program"`).
-  * Informational guidance explaining why real-world search terms replace formal CIP codes.
-* **Why it matters**: Demonstrates problem-solving in UX—bridging academic taxonomy with consumer search behavior and giving the user control over external API query parameters.
+## Recommended Screenshots to Add
+
+### 1. `01_dashboard_header.png` — Main Interface & Filters
+* **What to capture**: The top of the page showing the program picker (CIP code search), geographic market dropdown, award level selector, and the summary score banner at the top of the report.
+* **Why**: Shows how easy it is for an academic administrator to configure and run an analysis.
+
+### 2. `02_google_trends_modal.png` — Trends Query Customizer
+* **What to capture**: The pop-up dialog that appears before report generation. Capture the context chips showing the selected program and market, the input field with a suggested search term (e.g., `"computer science degree"`), and the suggestion pill buttons.
+* **Why**: Highlights a clean UX solution to a real data problem (translating academic titles into everyday search terms).
+
+### 3. `03_student_demand_panel.png` — Student Demand Section
+* **What to capture**: The Student Demand report panel showing degree conferral graphs, enrollment trends, and Google Trends search index figures (current index, prior year index, and YoY change %).
+* **Why**: Demonstrates how external search data and government enrollment stats are combined into a readable score.
+
+### 4. `04_competitive_intensity.png` — Competitor Saturation
+* **What to capture**: The Competitive Intensity panel showing peer institutions offering the same program in the selected market, degree completions breakdown, and market concentration.
+* **Why**: Shows the competitive benchmarking calculations.
+
+### 5. `05_employment_wages.png` — Employment & Wage Projections
+* **What to capture**: The Employment section with the BLS wage percentile distribution table (10th, 25th, Median, 75th, 90th percentile) and the SOC career crosswalk table.
+* **Why**: Shows how academic degrees connect to real-world job market data.
+
+### 6. `06_data_transparency_drawer.png` — Data Transparency Inspector
+* **What to capture**: The side drawer that opens when clicking any number in the report, showing the exact formula, primary data source (e.g., IPEDS 2023-24), collection date, and percentile calculation.
+* **Why**: Demonstrates our commitment to auditability—proving to faculty and deans that no numbers are "black box" estimates.
 
 ---
 
-### 3. Student Demand & Google Trends Trends Panel
-* **Filename**: `03_student_demand_panel.png`
-* **What to capture**:
-  * The Student Demand report section showing degree conferral trends, regional enrollment graphs, and Google search interest indices.
-  * Metrics: Current 1-year search index, Prior Year index, Year-over-Year (YoY) Change %, and Worldwide interest score.
-  * Normalized percentile score badges.
-* **Why it matters**: Visually validates the SerpAPI / Google Trends integration and multi-window analytical calculations in action.
-
----
-
-### 4. Competitive Intensity & Market Density
-* **Filename**: `04_competitive_intensity.png`
-* **What to capture**:
-  * The Competitive Intensity panel displaying peer institution counts within the chosen market.
-  * Market share breakdown, program completions distribution, and institution density metrics.
-  * Percentile scoring reflecting competitive saturation.
-* **Why it matters**: Highlights comparative market analysis algorithms and data visualization.
-
----
-
-### 5. Employment & Wage Projections Panel
-* **Filename**: `05_employment_wages.png`
-* **What to capture**:
-  * The Employment section showing BLS occupational wage tiers (10th percentile, 25th, Median, 75th, 90th percentile).
-  * SOC career crosswalk table linking the academic degree to real-world employment opportunities and projected 10-year job openings.
-* **Why it matters**: Showcases multi-dataset crosswalking (CIP to SOC) and complex labor market calculations.
-
----
-
-### 6. Interactive Data Transparency Drawer
-* **Filename**: `06_data_transparency_drawer.png`
-* **What to capture**:
-  * The dynamic inspector panel in the bottom right of the UI when a user clicks on any metric card.
-  * Detailed metadata: Source name (e.g., *NCES IPEDS 2023-24* or *BLS OEWS May 2024*), collection date, exact formula used, percentile benchmark population, and known limitations.
-* **Why it matters**: Demonstrates engineering rigor and the "Data Transparency" core requirement—eliminating black-box ambiguity for university stakeholders.
-
----
-
-## Screenshot Optimization Tips
-* **Resolution**: Capture at standard 1080p (1920x1080) or 1440p for crisp readability on high-DPI displays.
-* **Sanitization**: Ensure no confidential internal student data, private API keys, or internal development URLs (e.g. `localhost:5001`) are exposed in address bars or inspector tools. Use clean window captures.
-* **Format**: PNG format is recommended for sharp text and UI boundaries.
+## Tips
+* Capture at 1080p or 1440p so fonts and numbers stay sharp.
+* Make sure address bars don't show internal `localhost` ports or private API keys.
+* PNG format is preferred for clean text and UI lines.

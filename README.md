@@ -1,92 +1,63 @@
-# Program Market Research Application (PMRA) — Portfolio Showcase
+# Program Market Research Application (PMRA) — Project Overview
 
-[![Tech Stack](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
-[![Architecture](https://img.shields.io/badge/Architecture-Clean%20%2F%20Layered-blue)](#application-architecture)
-[![Frontend](https://img.shields.io/badge/Frontend-Blazor-512BD4?logo=blazor&logoColor=white)](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor)
-[![Backend](https://img.shields.io/badge/Backend-ASP.NET%20Core%20API-512BD4)](https://learn.microsoft.com/aspnet/core)
-[![Database](https://img.shields.io/badge/Database-PostgreSQL%20%2F%20EF%20Core-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![External Integration](https://img.shields.io/badge/Integration-SerpAPI%20%2F%20Google%20Trends-4285F4?logo=google&logoColor=white)](https://serpapi.com/)
-
-> **Note**: This repository is a sanitized, public portfolio showcase of the **Program Market Research Application (PMRA)** developed for **Minnesota State University, Mankato**. Proprietary business rules, institutional credentials, and complete production source files have been omitted or redacted. Selected representative architectural documents and code implementations are highlighted to demonstrate software engineering and leadership capabilities.
+> **Portfolio Note**: This repository is a sanitized overview of the **Program Market Research Application (PMRA)**, a web application my team and I built for **Minnesota State University, Mankato**. Because the primary codebase belongs to the university, proprietary business logic, internal connection strings, and full source trees are omitted here. Instead, this repo covers the application's architecture, data workflow, and a few representative code samples I wrote.
 
 ---
 
-## Executive Summary & Problem Statement
+## What is PMRA?
 
-Higher education institutions face increasing pressure to ensure new and existing academic programs align with market demand, workforce needs, and competitive landscapes. Traditionally, universities relied on costly third-party consulting services or labor-intensive manual workflows (such as *PES Markets by Gray DI*) to evaluate degree viability.
+When universities consider launching a new academic degree or reviewing an existing one, academic deans and program directors need to know:
+* Is there genuine student demand?
+* How saturated is the market with competing schools?
+* What are the employment projections and realistic wages for graduates?
+* Which award level makes sense (certificate, bachelor's, master's)?
 
-The **Program Market Research Application (PMRA)** is an enterprise web platform engineered to automate and democratize this analysis. By synthesizing public government and educational data (IPEDS, BLS, NSC) with real-time consumer search trends, PMRA generates comprehensive, deterministic market research reports across four pillars:
+Historically, this meant paying for expensive consulting platforms (like Gray DI) or having faculty spend weeks manually digging through federal spreadsheets. 
 
-1. **Student Demand**: Degrees conferred, regional enrollment trends, and consumer search interest.
-2. **Competitive Intensity**: Degree-granting institution density, market concentration, and program completions.
-3. **Employment & Wages**: Bureau of Labor Statistics (BLS) occupational employment projections, annual wage percentiles, and CIP-to-SOC career crosswalks.
-4. **Degree Level Alignment**: Award level suitability (Certificates, Associate's, Bachelor's, Master's, Doctoral).
+**PMRA** is an internal web tool that automates this entire research process. A user selects an academic program (by CIP code), a geographic market (e.g., Minnesota, Upper Midwest, or National), and an award level. The system pulls from preprocessed federal education/labor data plus live Google Trends search data to calculate a comprehensive, structured market report in seconds.
 
-Every metric produces a normalized **Percentile Score** (0–100%) against national or regional peer programs, linked to a real-time **Data Transparency** inspection engine for auditability.
-
----
-
-## Technical Stack & Architecture
-
-| Layer | Technologies & Frameworks | Key Responsibilities |
-| :--- | :--- | :--- |
-| **Frontend** | Blazor (Interactive Server / WebAssembly), HTML5, CSS3, JavaScript | Component-driven UI, real-time report filter orchestration, dynamic search term modals, responsive charts, and contextual transparency inspection. |
-| **Backend API** | C#, ASP.NET Core Web API (.NET 8) | RESTful API controllers, request validation, business logic coordination, metric calculation engines, and report assembly. |
-| **Data Access** | Entity Framework Core (EF Core), LINQ | Repository abstraction, schema separation, efficient relational querying, and projection mapping. |
-| **Database** | PostgreSQL / SQL Server | Structured storage divided across layered schemas (`raw`, `clean`, `reporting`) to isolate uncleaned data from pre-calculated report metrics. |
-| **Data Pipeline** | Python, Pandas, CLI automation | Scheduled and on-demand ingestion, ETL extraction, data validation, and CIP-SOC crosswalk standardization. |
-| **External APIs** | SerpAPI (Google Trends), NCHS, Federal Data Portals | Live multi-window timeline search indexing, geographic demand analysis, and public health data retrieval. |
-| **DevOps & QA** | GitHub Actions (CI/CD), xUnit, Git feature branching | Automated builds, unit and integration test suites, pull request validation, and continuous delivery. |
-
-For detailed architectural flowcharts and data ingestion lifecycles, see:
-* [Architecture Documentation](docs/architecture.md)
-* [Data Collection & Pipeline Workflow](docs/data-pipeline.md)
+Each metric receives a percentile score against peer programs, and every single number on the screen can be clicked to view its exact formula, source dataset, and date in a side drawer (we called this our **Data Transparency** feature).
 
 ---
 
-## Team Leadership & Engineering Contributions
+## Tech Stack
 
-As **Team Lead** for a cross-functional team of 4 engineers, I led both the product roadmap and technical architecture from inception through delivery.
-
-### 1. Requirements Engineering & Stakeholder Communication
-* Authored the comprehensive **Requirements Analysis Document (RAD)** translating academic administration requirements into deterministic data metrics and technical user stories.
-* Acted as the primary technical liaison to university stakeholders, executive leadership (Client: Dr. Jennifer Veltsos), faculty advisors, and subject matter experts (SMEs).
-* Eliminated requirement ambiguities upfront—such as clarifying the difference between national and in-market peer institutions, defining fallback behaviors for low-data CIP codes, and replacing black-box AI concepts with transparent, auditable percentile ranking algorithms.
-
-### 2. Team Coordination & Agentic Development Methodology
-* Pioneered an **Agentic Development** workflow within the team, combining modern AI developer agent tooling with rigorous engineering practices (branch protections, atomic pull requests, automated test verification, and structured peer reviews).
-* Led weekly planning sessions, unblocked teammates on technical dependencies, and defined clean interface contracts between the Blazor frontend, the API calculation services, and the Python data pipeline.
-
-### 3. Core Technical Contributions
-* **External API Integration (SerpAPI / Google Trends)**: Designed and implemented the complete Google Trends ingestion workflow. Formulated a 2-year regional timeline split to calculate Year-over-Year (YoY) momentum alongside a 1-year worldwide search volume baseline.
-* **Interactive Frontend Components**: Engineered the Blazor `GoogleTrendsModal` enabling academic analysts to bridge the gap between technical CIP classifications and consumer search behavior, providing keyword suggestions and validation.
-* **Scoring & Calculation Engine**: Contributed to the report scoring services that calculate percentile distributions and normalize disparate metrics into executive scores.
-* **CI/CD & DevOps**: Structured GitHub Actions workflows ensuring continuous compilation, unit test validation, and linting on every feature branch.
+* **Frontend**: Blazor (Interactive Server / WebAssembly), C#, HTML5, CSS
+* **Backend**: ASP.NET Core Web API (.NET 8), C#
+* **ORM & Database**: Entity Framework Core, PostgreSQL (using 3 isolated schemas: `raw`, `clean`, `reporting`)
+* **Data Processing**: Python, Pandas (CLI scripts for semi-annual government data updates)
+* **External APIs**: SerpAPI (Google Trends), CDC/NCHS health data
+* **DevOps**: GitHub Actions (CI build/test validation), Git feature branching
 
 ---
 
-## Showcase Code Examples
+## My Role: Team Lead
 
-This portfolio showcases selected representative implementations:
+I served as the **Team Lead** for our 4-person development team. 
 
-| Directory | Topic | Description |
-| :--- | :--- | :--- |
-| [`examples/google-trends-serpapi/`](examples/google-trends-serpapi/) | **Google Trends / SerpAPI Service** | Production-ready C# service implementing multi-window timeline aggregation, YoY momentum calculation, and resilient HTTP handling. |
-| [`examples/frontend-blazor/`](examples/frontend-blazor/) | **Blazor Modal & Query Orchestrator** | Interactive Razor component demonstrating clean state management, user guidance, suggestion chips, and event callback patterns. |
-| [`examples/other-implementations.md`](examples/other-implementations.md) | **Other Architectural Highlights** | Technical overviews of the NCHS public health data integration and the automated multi-source ETL pipeline. |
+### What I Owned & Delivered:
+1. **Requirements & Client Communication**:
+   * Worked directly with our client (Dr. Jennifer Veltsos) and university subject matter experts to understand their existing manual workflows.
+   * Wrote the **Requirements Analysis Document (RAD)**, turning broad administrative requests into specific formulas, schema definitions, and UI requirements.
+   * Kept the scope grounded—for example, advising against adding speculative "AI narrative summaries" in favor of deterministic, verifiable percentile calculations that university leadership could trust.
+
+2. **Team Coordination & Development Workflow**:
+   * We used an **Agentic Development** approach—integrating AI coding assistants into our day-to-day workflow while maintaining standard engineering hygiene: feature branching, code reviews, clean interfaces, and GitHub Actions CI checks to catch regressions.
+   * Coordinated interface contracts between the Blazor frontend, the .NET Web API, and the Python data pipeline so team members could work in parallel without blocking one another.
+
+3. **Key Technical Contributions**:
+   * **Google Trends / SerpAPI Integration**: Wrote the backend service that queries Google Trends via SerpAPI, handling multi-year windows and calculating YoY search momentum.
+   * **Interactive Blazor Components**: Built the `GoogleTrendsModal` dialog, query suggestion logic, and report filter interactions.
+   * **Data Pipeline & Crosswalks**: Worked on the logic that bridges academic degree classifications (CIP codes) to Bureau of Labor Statistics career codes (SOC codes).
 
 ---
 
-## Visual Demonstration & Screenshots
+## Repository Contents
 
-Visual walkthroughs of the application UI, report layout, and data inspection features can be found in the screenshots directory:
-
-👉 **[View Screenshots & UI Tour](docs/screenshots/README.md)**
-
----
-
-## Key Engineering Takeaways
-
-1. **Bridging Academic Taxonomy and Consumer Intent**: Standard academic CIP codes (e.g., `11.0701 - Computer Science`) do not reflect how prospective students search on Google. Introducing an interactive query customization modal with intelligent fallbacks solved this discrepancy without compromising report generation speed.
-2. **Deterministic Transparency over Black-Box Scoring**: Higher education decisions require accountability. By replacing speculative scoring with deterministic percentile models accompanied by clickable provenance metadata, users can verify every data point against primary sources (BLS, IPEDS).
-3. **Resilient Third-Party API Architecture**: External APIs can be rate-limited, volatile, or costly. Designing multi-tiered caching strategies and single-call multi-window query derivations minimized overhead while ensuring timely reporting.
+* **[Architecture Overview](docs/architecture.md)**: High-level diagram showing how Blazor, ASP.NET Core, PostgreSQL, and external services fit together.
+* **[Data Pipeline & Collection Flow](docs/data-pipeline.md)**: How federal data (IPEDS, BLS, NSC) is downloaded, cleaned, crosswalked, and cached.
+* **[Screenshots & UI Walkthrough](docs/screenshots/README.md)**: Visual tour of the main dashboard, report sections, and data transparency inspector.
+* **Code Examples**:
+  * **[Google Trends / SerpAPI Service](examples/google-trends-serpapi/)**: C# backend service handling HTTP requests, 2-year timeline splitting, and YoY change calculations.
+  * **[Blazor Query Modal Component](examples/frontend-blazor/)**: Razor component handling user query customization, suggestions, and keyboard shortcuts.
+  * **[Other Implementation Summaries](examples/other-implementations.md)**: Brief overviews of the NCHS public health data integration and the Python ETL pipeline.

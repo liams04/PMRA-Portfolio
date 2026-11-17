@@ -1,127 +1,114 @@
 # Application Architecture
 
-## System Overview
+## System Diagram
 
-The **Program Market Research Application (PMRA)** is engineered as a decoupled, multi-tier system. The architecture separates presentation, API orchestration, analytical calculation, data persistence, and external data ingestion to maximize modularity and maintainability.
+The application is structured into four main layers: the Blazor frontend, the ASP.NET Core Web API, a multi-schema PostgreSQL database, and a background Python data pipeline.
 
 ```mermaid
 flowchart TD
-    subgraph Client["Presentation Layer (PMRA.Web)"]
-        UI["Blazor Interactive UI<br/>(Pages & Components)"]
-        State["Client State & ViewModels"]
-        HttpClients["Typed API Clients<br/>(ReportsApiClient, EmploymentApiClient)"]
-        UI --> State
-        State --> HttpClients
+    subgraph Frontend["Blazor Web App (PMRA.Web)"]
+        UI["Blazor Interactive UI<br/>(Components & Pages)"]
+        State["View State & Filter Selection"]
+        HttpClients["Typed HTTP Clients<br/>(ReportsApiClient)"]
+        UI --> State --> HttpClients
     end
 
-    subgraph Backend["API & Application Layer (PMRA.Api)"]
-        API["REST Controllers<br/>(/api/reports, /api/employment)"]
-        Validation["Input & CIP Validation"]
-        RepGen["Report Generation Coordinator<br/>(ReportGenerationService)"]
+    subgraph Backend["Backend API (PMRA.Api)"]
+        API["API Controllers<br/>(/api/reports)"]
+        RepGen["Report Generation Coordinator"]
         
-        subgraph CalculationEngines["Analytical Engines"]
-            DemandEngine["Student Demand Calculator"]
-            CompEngine["Competitive Intensity Calculator"]
-            EmpEngine["Employment & Wage Calculator"]
-            ScoringEngine["Percentile Scoring & Normalization Engine"]
+        subgraph Services["Calculation Services"]
+            Demand["Student Demand Service"]
+            Comp["Competition Service"]
+            Emp["Employment & Wage Service"]
+            Scoring["Percentile Scoring Service"]
         end
 
-        API --> Validation
-        Validation --> RepGen
-        RepGen --> DemandEngine
-        RepGen --> CompEngine
-        RepGen --> EmpEngine
-        RepGen --> ScoringEngine
+        API --> RepGen
+        RepGen --> Demand & Comp & Emp & Scoring
     end
 
-    subgraph External["External Integrations"]
-        SerpApi["SerpAPI<br/>(Google Trends Engine)"]
-        NCHS["NCHS Public Health API<br/>(Health Data Services)"]
+    subgraph External["External APIs"]
+        SerpApi["SerpAPI<br/>(Google Trends Data)"]
+        NCHS["CDC / NCHS API<br/>(Health Data)"]
     end
 
-    subgraph Database["Persistence Layer (PostgreSQL)"]
-        subgraph Schemas["Three-Schema Isolation"]
-            RawSchema[("raw<br/>(Unmodified Source Data)")]
-            CleanSchema[("clean<br/>(Standardized, CIP/SOC Mapped)")]
-            ReportSchema[("reporting<br/>(Materialized Reports & Scores)")]
-        end
+    subgraph Database["PostgreSQL Database"]
+        RawSchema[("raw<br/>Original government downloads")]
+        CleanSchema[("clean<br/>Cleaned tables & CIP-SOC mappings")]
+        ReportSchema[("reporting<br/>Cached reports & scores")]
     end
 
-    subgraph Pipeline["Data Pipeline (Python ETL)"]
-        Extract["Source Discoverers & Downloaders"]
-        Transform["Standardizer & CIP-SOC Crosswalk"]
-        Validate["Pipeline Validator & Run Logger"]
-        Extract --> Transform --> Validate
+    subgraph Pipeline["Data Pipeline (Python)"]
+        ETL["Ingest & Cleaning Scripts"]
     end
 
-    %% Communications
-    HttpClients -->|HTTPS / JSON| API
-    DemandEngine -->|HTTP Query| SerpApi
-    DemandEngine -->|HTTP Query| NCHS
+    %% Connections
+    HttpClients -->|HTTPS JSON| API
+    Demand -->|HTTP| SerpApi
+    Demand -->|HTTP| NCHS
     
     RepGen -->|EF Core Queries| CleanSchema
-    RepGen -->|Cache Lookup / Save| ReportSchema
+    RepGen -->|Read / Write Cache| ReportSchema
     
-    Validate -->|Bulk Load| RawSchema
-    Transform -->|Standardize| CleanSchema
+    ETL -->|Bulk Insert| RawSchema
+    ETL -->|Clean & Map| CleanSchema
 ```
 
 ---
 
-## Architectural Principles & Constraints
+## How the Pieces Fit Together
 
-### 1. Hard Separation of Concerns
-* **No Direct DB Access from UI**: The Blazor frontend operates strictly over HTTP calling ASP.NET Core endpoints. It has zero knowledge of database connections or underlying database schemas.
-* **Service Independence**: Calculation services (e.g., `EmploymentCalculator`, `ReportScoringCalculator`) operate against standardized DTOs and interfaces, allowing scoring logic to be unit tested without live database or network dependencies.
+### 1. Blazor Frontend (`PMRA.Web`)
+* The frontend is built with Blazor and talks to the backend strictly over HTTP via typed API clients.
+* We kept all database logic and heavy math out of the client. The frontend's job is purely to collect user filter selections (program, market, award level), show progress spinners while calculations run, render the report sections, and display provenance metadata when a user clicks on a number.
 
-### 2. Multi-Schema Database Isolation
-The database is deliberately structured into three distinct schemas:
-1. `raw`: Direct mirror of external downloads (IPEDS completions, BLS wage tables). Preserves original source integrity.
-2. `clean`: Normalized and standardized data. Maps heterogeneous source IDs to unified CIP (Classification of Instructional Programs) and SOC (Standard Occupational Classification) codes.
-3. `reporting`: Materialized reports and calculated percentile scores. Supports instant cache retrieval and historical report versioning.
+### 2. ASP.NET Core Web API (`PMRA.Api`)
+* When a user requests a report, the `ReportGenerationService` acts as a traffic cop.
+* It first checks the `reporting` database schema to see if a report with those exact parameters already exists.
+* If a cached report is found and the underlying data hasn't been updated since it was built, it returns the report immediately.
+* If it's a new query or the dataset was recently updated, the coordinator calls the individual calculation services (`StudentDemand`, `Competition`, `Employment`), queries SerpAPI for live search trends, computes percentile scores, saves the result to the cache, and sends it back.
 
-### 3. Report Caching & Staleness Invalidation
-To balance responsive performance with fresh data:
-* When a report is requested for a specific `(CIP Code, Market, Award Level, Rubric)` tuple, the API first checks `reporting.Reports`.
-* If a stored report exists and was generated after the latest data refresh (tracked by the pipeline run log), the cached report is returned immediately.
-* If the underlying dataset has been refreshed or no report exists, the calculation engines execute, persist the result, and return the newly materialized report.
-
-### 4. Resilient External Service Design
-* Calls to external services like SerpAPI (Google Trends) are isolated behind strict interface contracts (`IGoogleTrendsService`).
-* Configurable timeouts, error handling, and parameter validation prevent external third-party outages from crashing core report generation.
+### 3. Three-Schema Database Design
+Rather than dumping everything into one flat schema, we split PostgreSQL into three isolated areas:
+1. `raw`: Contains unedited raw data directly as downloaded from federal files (IPEDS, BLS). This makes it easy to audit source data without re-downloading files.
+2. `clean`: Tables after our Python pipeline standardizes data types, normalizes institution names, and runs the CIP-to-SOC career crosswalks.
+3. `reporting`: Materialized reports and calculated metric scores. This allows instant loading for frequently requested programs.
 
 ---
 
-## Request & Report Generation Lifecycle
+## Report Generation Flow
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Academic User
-    participant Blazor as Blazor Frontend
-    participant Modal as Google Trends Modal
+    actor User as User
+    participant UI as Blazor Frontend
+    participant Modal as Trends Modal
     participant API as ASP.NET Core API
-    participant Cache as Report Cache / DB
+    participant DB as Database (reporting schema)
     participant Serp as SerpAPI (Google Trends)
-    participant Calc as Scoring Engine
 
-    User->>Blazor: Selects CIP, Market, Award Level
-    User->>Blazor: Clicks "Generate Report"
-    Blazor->>Modal: Opens Search Term Dialog
-    User->>Modal: Enters / Confirms search query
-    Modal-->>Blazor: Confirmed Query & Geo Scope
+    User->>UI: Selects Program, Market, Award Level
+    User->>UI: Clicks "Generate Report"
+    UI->>Modal: Prompts for search term (defaults to cleaned title)
+    User->>Modal: Confirms search query
+    Modal-->>UI: Passes query back to page
     
-    Blazor->>API: POST /api/reports/generate (Request DTO)
-    API->>Cache: Check for existing unexpired report
-    alt Valid Cache Found
-        Cache-->>API: Return materialized report
-    else Cache Miss or Data Updated
-        API->>Serp: Query 2-yr regional + 1-yr worldwide timeline
-        Serp-->>API: Timeline index values
-        API->>Calc: Compute raw metrics & percentile distributions
-        Calc-->>API: Calculated sections & transparency metadata
-        API->>Cache: Persist new report to reporting schema
+    UI->>API: POST /api/reports/generate
+    API->>DB: Check for existing unexpired report
+    
+    alt Cached Report Found
+        DB-->>API: Returns cached report
+    else Not Cached / Data Updated
+        API->>Serp: Queries 2-year regional + 1-year global search index
+        Serp-->>API: Returns weekly timeline points
+        API->>DB: Queries clean employment & completion stats
+        DB-->>API: Returns cleaned metrics
+        API->>API: Calculates percentiles against peer programs
+        API->>DB: Saves generated report to reporting schema
     end
-    API-->>Blazor: Return Complete Report DTO
-    Blazor->>User: Render interactive report panels & transparency drawer
+    
+    API-->>UI: Returns report payload
+    UI-->>User: Renders report and updates Data Transparency drawer
 ```

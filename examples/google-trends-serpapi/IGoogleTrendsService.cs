@@ -25,3 +25,4 @@ public interface IGoogleTrendsService
     /// <returns>A calculated <see cref="GoogleTrendsResult"/> snapshot.</returns>
     Task<GoogleTrendsResult> QueryAsync(string query, string geo, CancellationToken ct = default);
 }
+
